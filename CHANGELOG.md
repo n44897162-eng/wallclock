@@ -34,6 +34,10 @@ All notable changes to this project are documented here. The format follows
 
 - `min_per_day` no longer flags local dates before `DTSTART` or after a finite
   rule's `UNTIL`/`COUNT` was exhausted.
+- Packaging: `tzdata` is declared for Windows (no system zoneinfo) and PyYAML
+  for the YAML-config test; CI installs both and now also runs on Windows.
+- The CI workflow uses current action versions; the README advertises the
+  accurate test count and documents every optional extra.
 
 ## [0.1.0] - 2026-11-21
 

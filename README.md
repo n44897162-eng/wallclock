@@ -1,5 +1,7 @@
 # wallclock
 
+[![ci](https://github.com/n44897162-eng/wallclock/actions/workflows/ci.yml/badge.svg)](https://github.com/n44897162-eng/wallclock/actions/workflows/ci.yml)
+
 **Temporal-contract verification for scheduled jobs.**
 
 A cron line or an RRULE is a sentence about *wall-clock* time. The wall clock is
@@ -54,20 +56,31 @@ plus an `.ics` of the first case).
 
 ## Install
 
-Python 3.11+ and a system tz database. No runtime dependencies.
+Python 3.11+. Linux and macOS use the system time zone database; on Windows
+`tzdata` is installed automatically as a conditional dependency. On other
+platforms the core has no runtime dependencies.
 
 ```bash
-python3 -m pip install -e .        # development install
-# or: pipx install .              # isolated CLI install
-wallclock demo                     # or: python3 -m wallclock demo
+python3 -m pip install .            # CLI install (Windows gets tzdata automatically)
+python3 -m pip install '.[yaml]'    # if you want YAML config files
+# or: pipx install .                # isolated CLI install
+wallclock demo                      # or: python3 -m wallclock demo
 ```
+
+JSON configs need nothing extra; YAML configs need PyYAML. Without it the CLI
+says so and points you at `.json` instead of failing cryptically.
 
 The repository is a normal Python project: `pyproject.toml`, `src` = the
 `wallclock/` package, `tests/`, `examples/`, `docs/`, CI workflow, changelog and
 contributor guide. Nothing outside the standard library is required at runtime.
 
-Optional, for the differential test suite only: `python-dateutil`, `croniter`
-(`python3 -m pip install -e '.[test]'`).
+Optional extras:
+
+| extra | what it adds |
+| --- | --- |
+| `.[windows]` | `tzdata` explicitly — already installed on Windows by default, handy for pinning or offline use elsewhere |
+| `.[yaml]` | `pyyaml` — YAML config file support |
+| `.[test]` | the full suite: pytest, `python-dateutil`, `croniter`, PyYAML, and `tzdata` |
 
 ## Contracts
 
@@ -296,7 +309,7 @@ wallclock/repair.py    verified repair synthesis
 wallclock/report.py    text / markdown / JSON / self-contained HTML timeline / .ics
 wallclock/explain.py   the definition behind every contract and finding code
 wallclock/cli.py       the `wallclock` command
-tests/                 229 tests, including the differential oracles
+tests/                 190 tests, including the differential oracles
 scripts/bench.py       the benchmark table above
 docs/MODEL.md          formal model, scope of the guarantee, assumptions
 ```
