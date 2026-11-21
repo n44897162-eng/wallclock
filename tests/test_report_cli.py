@@ -193,7 +193,7 @@ def test_cli_scan(capsys) -> None:
     code = main(["scan", "--cron", "30 2 * * *", "--from", "2026-03-01", "--to", "2026-04-01"])
     assert code == 0
     out = capsys.readouterr().out
-    assert "scanned" in out and "skip at least one occurrence" in out
+    assert "scanned" in out and "zone(s) affected" in out and "violations" in out
     assert "Europe/Berlin" in out
     assert "America/Santiago" not in out  # Chile's transition is at midnight, not 02:30
 
@@ -204,3 +204,64 @@ def test_cli_scan_json(capsys) -> None:
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
     assert any(z["zone"] == "America/Santiago" for z in payload["zones"])
+
+
+# -- v0.2: fail-on, contract-aware diff and scan ---------------------------
+def test_cli_check_fail_on_levels(capsys) -> None:
+    base = ["check", "--cron", "0 0 1 * 1", "--from", "2026-01-01", "--to", "2026-04-01"]
+    assert main(base + ["--fail-on", "warning"]) == 1  # warnings are failures now
+    capsys.readouterr()
+    assert main(base) == 0  # ... but not by default
+    capsys.readouterr()
+    failing = ["check", "--cron", "30 2 * * *", "--tz", "Europe/Berlin",
+               "--from", "2026-03-01", "--to", "2026-04-01", "--min-per-day", "1"]
+    assert main(failing + ["--fail-on", "never"]) == 0
+    capsys.readouterr()
+
+
+def test_cli_diff_reports_contract_verdict(capsys) -> None:
+    code = main(["diff", "--a-cron", "30 3 * * *", "--b-cron", "30 2 * * *",
+                 "--tz", "Europe/Berlin", "--from", "2026-03-01", "--to", "2026-04-01",
+                 "--min-per-day", "1", "--fail-on", "regression"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "verdict: regressed" in out and "a PASS -> b FAIL" in out
+
+
+def test_cli_diff_improvement_exits_zero(capsys) -> None:
+    code = main(["diff", "--a-cron", "30 2 * * *", "--b-cron", "30 3 * * *",
+                 "--tz", "Europe/Berlin", "--from", "2026-03-01", "--to", "2026-04-01",
+                 "--min-per-day", "1", "--fail-on", "error"])
+    assert code == 0
+    assert "verdict: improved" in capsys.readouterr().out
+
+
+def test_cli_diff_without_contracts_keeps_old_behaviour(capsys) -> None:
+    assert main(["diff", "--a-cron", "30 3 * * *", "--b-cron", "30 2 * * *",
+                 "--tz", "Europe/Berlin", "--from", "2026-03-01", "--to", "2026-04-01",
+                 "--fail-on", "regression"]) == 0
+    capsys.readouterr()
+
+
+def test_cli_scan_with_contracts(capsys) -> None:
+    code = main(["scan", "--cron", "0 0 * * *", "--forbidden-window", "00:00-01:00",
+                 "--from", "2026-03-01", "--to", "2026-04-01", "--fail-on", "error"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "violations" in out and "forbidden" in out
+
+
+def test_cli_scan_contract_json(capsys) -> None:
+    code = main(["scan", "--cron", "0 0 * * *", "--forbidden-window", "00:00-01:00",
+                 "--from", "2026-03-01", "--to", "2026-04-01", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0  # --fail-on defaults to never for scan
+    assert payload["contracts"] == ["forbidden_window: 00:00-01:00"]
+    assert payload["zones"][0]["violations"] > 0
+
+
+def test_cli_new_weekly_contract_flags(capsys) -> None:
+    code = main(["check", "--cron", "0 9 * * 1", "--min-per-week", "2",
+                 "--from", "2026-01-01", "--to", "2026-02-01"])
+    assert code == 1
+    assert "min_per_week" in capsys.readouterr().out

@@ -1,0 +1,14 @@
+# The same job moved 30 minutes later, which survives the spring-forward gap
+# in Europe/Berlin (the gap is 02:00-03:00; 03:30 always exists).
+schedule:
+  cron: "30 3 * * *"
+  timezone: Europe/Berlin
+  policy: { gap: skip, ambiguous: earlier }
+
+contracts:
+  - max_gap: 26h
+  - min_per_day: 1
+
+window:
+  from: 2026-01-01
+  to: 2027-01-01

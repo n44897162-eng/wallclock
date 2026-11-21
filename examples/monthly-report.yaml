@@ -1,0 +1,14 @@
+# "The last weekday of every month, at 09:00 New York time."
+# RRULE does the date math; the contract checks the result is never too far apart.
+schedule:
+  rrule: "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"
+  dtstart: 2026-01-30T09:00
+  timezone: America/New_York
+
+contracts:
+  - max_gap: 40d
+  - local_window: 08:00-10:00
+
+window:
+  from: 2026-01-01
+  to: 2027-01-01

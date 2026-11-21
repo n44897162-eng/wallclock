@@ -85,14 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
     win.add_argument("--to", dest="to", help="window end (date or ISO datetime)")
     win.add_argument("--months", type=int, default=12, help="window length when --to is omitted")
 
-    con = argparse.ArgumentParser(add_help=False)
-    con.add_argument("--max-gap", help="e.g. 26h")
-    con.add_argument("--local-window", help="e.g. 08:00-10:00")
-    con.add_argument("--min-per-day", type=int)
-    con.add_argument("--max-per-day", type=int)
-    con.add_argument("--max-drift", help="e.g. 0s")
-    con.add_argument("--contract", action="append", default=[],
-                     help="extra contract as key=value (repeatable)")
+    cflags = argparse.ArgumentParser(add_help=False)
+    cflags.add_argument("--max-gap", help="e.g. 26h")
+    cflags.add_argument("--local-window", help="e.g. 08:00-10:00")
+    cflags.add_argument("--forbidden-window", help="e.g. 22:00-06:00 (may cross midnight)")
+    cflags.add_argument("--min-per-day", type=int)
+    cflags.add_argument("--max-per-day", type=int)
+    cflags.add_argument("--min-per-week", type=int)
+    cflags.add_argument("--max-per-week", type=int)
+    cflags.add_argument("--max-drift", help="e.g. 0s")
+    cflags.add_argument("--contract", action="append", default=[],
+                        help="extra contract as key=value (repeatable)")
+    con = argparse.ArgumentParser(add_help=False, parents=[cflags])
     con.add_argument("--config", help="YAML/JSON file with schedule/contracts/window")
     con.add_argument("--spec", help="inline JSON with schedule/contracts/window")
 
@@ -103,13 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("check", parents=[sch, win, con, out], help="verify contracts over a window")
     c.add_argument("--repair", action="store_true", help="also propose verified fixes")
+    c.add_argument("--fail-on", choices=("error", "warning", "never"), default="error",
+                   help="exit 1 on errors (default), on warnings too, or never")
     c.set_defaults(func=cmd_check)
 
     s = sub.add_parser("sim", parents=[sch, win, out], help="list the actual runs")
     s.add_argument("--limit", type=int, default=50)
     s.set_defaults(func=cmd_sim)
 
-    d = sub.add_parser("diff", parents=[win], help="semantic diff of two schedules")
+    d = sub.add_parser("diff", parents=[win, cflags], help="semantic diff of two schedules")
     d.add_argument("--a-cron")
     d.add_argument("--a-rrule")
     d.add_argument("--a-dtstart")
@@ -120,6 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--gap", choices=GAP_POLICIES, default="skip")
     d.add_argument("--ambiguous", choices=AMBIGUOUS_POLICIES, default="earlier")
     d.add_argument("--tolerance", default="3h", help="pairing window for 'moved' runs")
+    d.add_argument("--fail-on", choices=("none", "error", "regression"), default="none",
+                   help="exit 1 when the new schedule violates a contract, or when it regresses")
     d.add_argument("--format", choices=("text", "json"), default="text")
     d.add_argument("--out")
     d.set_defaults(func=cmd_diff)
@@ -138,8 +146,10 @@ def build_parser() -> argparse.ArgumentParser:
     z.add_argument("--out")
     z.set_defaults(func=cmd_zones)
 
-    sc = sub.add_parser("scan", parents=[sch, win], help="which timezones break this schedule?")
+    sc = sub.add_parser("scan", parents=[sch, win, cflags], help="which timezones break this schedule?")
     sc.add_argument("--all", action="store_true", help="scan all 599 zones instead of ~50 major ones")
+    sc.add_argument("--fail-on", choices=("error", "never"), default="never",
+                   help="exit 1 if any scanned zone violates a contract")
     sc.add_argument("--format", choices=("text", "json"), default="text")
     sc.add_argument("--out")
     sc.set_defaults(func=cmd_scan)
@@ -164,7 +174,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     if getattr(args, "repair", False) and not report.ok:
         fixes = repair_schedule(schedule, contracts, lo, hi)
         _print_repairs(fixes)
-    return 0 if report.ok else 1
+    return _exit_for(report, getattr(args, "fail_on", "error"))
 
 
 def cmd_sim(args: argparse.Namespace) -> int:
@@ -207,7 +217,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
     a = _build_schedule(args.a_cron, args.a_rrule, args.a_dtstart, args.tz, policy, "local", "a")
     b = _build_schedule(args.b_cron, args.b_rrule, args.b_dtstart, args.tz, policy, "local", "b")
     lo, hi = _window(args, args.tz, None)
-    result = diff_schedules(a, b, lo, hi, tolerance=parse_duration(args.tolerance))
+    contracts = _contracts_from(args, None)
+    result = diff_schedules(a, b, lo, hi, tolerance=parse_duration(args.tolerance),
+                            contracts=contracts)
     if args.format == "json":
         text = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
     else:
@@ -215,9 +227,18 @@ def cmd_diff(args: argparse.Namespace) -> int:
             f"a: {a.describe()}",
             f"b: {b.describe()}",
             f"window: {_iso(lo)} .. {_iso(hi)}",
-            "",
-            result.summary(),
         ]
+        if result.contracts:
+            lines.append("contracts: " + "; ".join(c.describe() for c in result.contracts))
+            assert result.report_a is not None and result.report_b is not None
+            lines.append(
+                f"verdict: {result.verdict} "
+                f"(a {'PASS' if result.report_a.ok else 'FAIL'} -> "
+                f"b {'PASS' if result.report_b.ok else 'FAIL'})"
+            )
+            for f in result.report_b.errors[:5]:
+                lines.append(f"  still failing: {f.code}: {f.message}")
+        lines += ["", result.summary()]
         for x, y in result.moved[:10]:
             lines.append(f"  moved  {_iso(x.utc)} -> {_iso(y.utc)}  ({format_duration(y.utc - x.utc)})")
         for f in result.added[:10]:
@@ -226,7 +247,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
             lines.append(f"  removed {_iso(f.utc)}")
         text = "\n".join(lines)
     _write(text + "\n", args.out)
-    return 0
+    return _diff_exit(args, result)
 
 
 def cmd_repair(args: argparse.Namespace) -> int:
@@ -278,6 +299,7 @@ def cmd_zones(args: argparse.Namespace) -> int:
 def cmd_scan(args: argparse.Namespace) -> int:
     zones = list_zones() if args.all else MAJOR_ZONES
     lo, hi = _window(args, "UTC", None)
+    contracts = _contracts_from(args, None)
     rows = []
     for name in zones:
         try:
@@ -286,29 +308,44 @@ def cmd_scan(args: argparse.Namespace) -> int:
         except WallclockError:
             continue
         sim = simulate(schedule, lo, hi)
-        if sim.skipped:
-            rows.append((len(sim.skipped), len(sim.firings), name))
-    rows.sort(key=lambda row: (-row[0], row[2]))
+        issues = [finding for contract in contracts for finding in contract.check(sim)]
+        if sim.skipped or issues:
+            rows.append(
+                {
+                    "zone": name,
+                    "runs": len(sim.firings),
+                    "skipped": len(sim.skipped),
+                    "violations": len(issues),
+                    "first": issues[0].message if issues else None,
+                }
+            )
+    rows.sort(key=lambda row: (-row["violations"], -row["skipped"], row["zone"]))
     if args.format == "json":
         payload = {
             "window": {"from": _iso(lo), "to": _iso(hi)},
             "scanned": len(zones),
             "affected": len(rows),
-            "zones": [{"zone": z, "skipped": s, "runs": r} for s, r, z in rows],
+            "contracts": [c.describe() for c in contracts],
+            "zones": rows,
         }
         _write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", args.out)
-        return 0
+        return 1 if args.fail_on == "error" and any(r["violations"] for r in rows) else 0
     lines = [
         f"scanned {len(zones)} zones, {_iso(lo)} .. {_iso(hi)}",
-        f"{len(rows)} zone(s) skip at least one occurrence",
+        f"{len(rows)} zone(s) affected",
         "",
     ]
-    for skipped, runs, name in rows:
-        lines.append(f"  {name:28s} {skipped:3d} skipped   {runs:5d} runs")
+    for row in rows:
+        lines.append(
+            f"  {row['zone']:28s} {row['skipped']:3d} skipped   "
+            f"{row['violations']:3d} violations   {row['runs']:5d} runs"
+        )
+        if row["first"]:
+            lines.append(f"      {row['first'][:110]}")
     if not rows:
         lines.append("  this schedule survives every scanned timezone in the window")
     _write("\n".join(lines) + "\n", args.out)
-    return 0
+    return 1 if args.fail_on == "error" and any(r["violations"] for r in rows) else 0
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
@@ -407,10 +444,16 @@ def _contracts_from(args: argparse.Namespace, config_contracts) -> list:
         out.append({"max_gap": args.max_gap})
     if getattr(args, "local_window", None):
         out.append({"local_window": args.local_window})
+    if getattr(args, "forbidden_window", None):
+        out.append({"forbidden_window": args.forbidden_window})
     if getattr(args, "min_per_day", None) is not None:
         out.append({"min_per_day": args.min_per_day})
     if getattr(args, "max_per_day", None) is not None:
         out.append({"max_per_day": args.max_per_day})
+    if getattr(args, "min_per_week", None) is not None:
+        out.append({"min_per_week": args.min_per_week})
+    if getattr(args, "max_per_week", None) is not None:
+        out.append({"max_per_week": args.max_per_week})
     if getattr(args, "max_drift", None):
         out.append({"max_drift": args.max_drift})
     for raw in getattr(args, "contract", []) or []:
@@ -434,6 +477,23 @@ def _emit_report(report, args: argparse.Namespace) -> None:
     _write(text + "\n", args.out)
     if getattr(args, "ics", None):
         Path(args.ics).write_text(render_ics(report.simulation.firings, report.schedule), encoding="utf-8")
+
+
+def _exit_for(report, mode: str) -> int:
+    if mode == "never":
+        return 0
+    if mode == "warning":
+        return 1 if any(f.severity in ("warning", "error") for f in report.findings) else 0
+    return 0 if report.ok else 1
+
+
+def _diff_exit(args: argparse.Namespace, result) -> int:
+    mode = getattr(args, "fail_on", "none")
+    if mode == "none" or result.report_a is None or result.report_b is None:
+        return 0
+    if mode == "error":
+        return 0 if result.report_b.ok else 1
+    return 1 if (result.report_a.ok and not result.report_b.ok) else 0
 
 
 def _print_repairs(fixes) -> None:

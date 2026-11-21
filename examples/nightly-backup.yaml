@@ -1,0 +1,18 @@
+# This config FAILS on purpose: it is the case the project exists for.
+# See the verified fixes with:
+#   wallclock repair --config examples/nightly-backup.yaml
+#
+# The most ordinary nightly job in Europe.
+# It does not run on the spring-forward Sunday, and the next run is 47h later.
+schedule:
+  cron: "30 2 * * *"
+  timezone: Europe/Berlin
+  policy: { gap: skip, ambiguous: earlier }
+
+contracts:
+  - max_gap: 26h
+  - min_per_day: 1
+
+window:
+  from: 2026-01-01
+  to: 2027-01-01

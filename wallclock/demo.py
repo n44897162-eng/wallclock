@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .diff import diff as diff_schedules
 from .report import render_html, render_ics
 from .schedule import Schedule
 from .tz import Policy
@@ -135,6 +136,17 @@ def run_demo(out_dir: str | None = None, as_json: bool = False) -> int:
             print(f"    - {finding.severity}: {finding.message}")
         if len(report.findings) > 3:
             print(f"    ... {len(report.findings) - 3} more finding(s)")
+    a = Schedule.from_cron("30 2 * * *", "Europe/Berlin")
+    b = Schedule.from_cron("30 3 * * *", "Europe/Berlin")
+    lo, hi = horizon("Europe/Berlin", "2026-01-01", "2027-01-01")
+    review = diff_schedules(
+        a, b, lo, hi,
+        contracts=[parse_contract({"max_gap": "26h"}), parse_contract({"min_per_day": 1})],
+    )
+    print("\nreviewing the obvious fix (02:30 -> 03:30) over 2026:")
+    print(f"  {review.summary()}")
+    print(f"  verdict: {review.verdict}")
+
     print("\nRun `wallclock check --help` to point this at your own schedules.")
 
     if out_dir:

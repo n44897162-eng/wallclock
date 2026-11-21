@@ -91,17 +91,26 @@ def format_duration(delta: timedelta) -> str:
     return sign + "".join(parts)
 
 
-def parse_local_window(text: str) -> tuple[time, time]:
+def parse_time_range(text: str, allow_wrap: bool) -> tuple[time, time]:
     m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*", text or "")
     if not m:
-        raise SpecError(f"bad local_window {text!r} (use HH:MM-HH:MM)")
+        raise SpecError(f"bad time range {text!r} (use HH:MM-HH:MM)")
     h1, m1, h2, m2 = (int(x) for x in m.groups())
     if not (0 <= h1 < 24 and 0 <= h2 < 24 and 0 <= m1 < 60 and 0 <= m2 < 60):
-        raise SpecError(f"bad local_window {text!r}")
+        raise SpecError(f"bad time range {text!r}")
     start, end = time(h1, m1), time(h2, m2)
-    if start >= end:
-        raise SpecError("local_window must not cross midnight (start must be before end)")
+    if start == end:
+        raise SpecError(f"empty time range {text!r}")
+    if not allow_wrap and start > end:
+        raise SpecError("this window must not cross midnight (start must be before end)")
     return start, end
+
+
+def parse_local_window(text: str) -> tuple[time, time]:
+    try:
+        return parse_time_range(text, allow_wrap=False)
+    except SpecError as exc:
+        raise SpecError(f"local_window: {exc}") from None
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +364,105 @@ class MaxDrift(Contract):
         return out
 
 
+@dataclass
+class ForbiddenWindow(Contract):
+    """No run may land inside this local time-of-day range (may cross midnight)."""
+
+    start: time
+    end: time
+    code = "forbidden_window"
+
+    def describe(self) -> str:
+        return f"forbidden_window: {self.start:%H:%M}-{self.end:%H:%M}"
+
+    def contains(self, t: time) -> bool:
+        if self.start <= self.end:
+            return self.start <= t < self.end
+        return t >= self.start or t < self.end
+
+    def check(self, sim: Simulation) -> list[Finding]:
+        out: list[Finding] = []
+        for f in sim.firings:
+            if self.contains(f.effective_local.time()):
+                out.append(
+                    Finding(
+                        "forbidden_window",
+                        "error",
+                        f"run at {_iso(f.utc)} lands at {f.effective_local:%H:%M} local, inside "
+                        f"the forbidden {self.start:%H:%M}-{self.end:%H:%M}",
+                        at=f.utc,
+                        evidence={"local": f.effective_local, "kind": f.kind},
+                    )
+                )
+        return out
+
+
+def _iso_weeks(sim: Simulation) -> dict[tuple[int, int], list[date]]:
+    weeks: dict[tuple[int, int], list[date]] = {}
+    for day in full_days(sim):
+        iso = day.isocalendar()
+        weeks.setdefault((iso[0], iso[1]), []).append(day)
+    return weeks
+
+
+def _per_week(sim: Simulation, n: int, mode: str) -> list[Finding]:
+    counts = Counter(f.effective_local.date() for f in sim.firings)
+    first, last = _active_dates(sim)
+    out: list[Finding] = []
+    for (iso_year, iso_week), days in sorted(_iso_weeks(sim).items()):
+        if len(days) < 7:
+            continue  # partial ISO week at a window edge: not evidence either way
+        # only judge a week the rule was actually alive for, in full
+        if first is not None and days[0] < first:
+            continue
+        if last is not None and days[-1] > last:
+            continue
+        runs = sum(counts[d] for d in days)
+        bad = runs < n if mode == "min" else runs > n
+        if bad:
+            relation = "at least" if mode == "min" else "at most"
+            out.append(
+                Finding(
+                    f"{mode}_per_week",
+                    "error",
+                    f"ISO week {iso_year}-W{iso_week:02d} ({days[0].isoformat()}..{days[-1].isoformat()}) "
+                    f"has {runs} runs, contract requires {relation} {n}",
+                    at=None,
+                    evidence={
+                        "week": f"{iso_year}-W{iso_week:02d}",
+                        "from": days[0].isoformat(),
+                        "to": days[-1].isoformat(),
+                        "runs": runs,
+                    },
+                )
+            )
+    return out
+
+
+@dataclass
+class MinPerWeek(Contract):
+    minimum: int
+    code = "min_per_week"
+
+    def describe(self) -> str:
+        return f"min_per_week: {self.minimum}"
+
+    def check(self, sim: Simulation) -> list[Finding]:
+        return _per_week(sim, self.minimum, "min")
+
+
+@dataclass
+class MaxPerWeek(Contract):
+    maximum: int
+    code = "max_per_week"
+
+    def describe(self) -> str:
+        return f"max_per_week: {self.maximum}"
+
+    def check(self, sim: Simulation) -> list[Finding]:
+        return _per_week(sim, self.maximum, "max")
+
+
 def parse_contract(spec: dict | str) -> Contract:
     if not isinstance(spec, dict) or len(spec) != 1:
         raise SpecError(f"a contract must be a single-key mapping, got {spec!r}")
@@ -371,7 +479,17 @@ def parse_contract(spec: dict | str) -> Contract:
         return MaxPerDay(_positive_int(value, key))
     if key == "max_drift":
         return MaxDrift(parse_duration(value))
-    raise SpecError(f"unknown contract {key!r} (max_gap, local_window, min_per_day, max_per_day, max_drift)")
+    if key == "min_per_week":
+        return MinPerWeek(_positive_int(value, key))
+    if key == "max_per_week":
+        return MaxPerWeek(_positive_int(value, key))
+    if key == "forbidden_window":
+        start, end = parse_time_range(str(value), allow_wrap=True)
+        return ForbiddenWindow(start, end)
+    raise SpecError(
+        f"unknown contract {key!r} (max_gap, local_window, forbidden_window, "
+        f"min_per_day, max_per_day, min_per_week, max_per_week, max_drift)"
+    )
 
 
 def parse_contracts(specs: Sequence[dict | str]) -> list[Contract]:

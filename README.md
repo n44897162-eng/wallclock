@@ -57,9 +57,14 @@ plus an `.ics` of the first case).
 Python 3.11+ and a system tz database. No runtime dependencies.
 
 ```bash
-python3 -m pip install -e .        # or: PYTHONPATH=. python3 -m wallclock ...
-wallclock demo
+python3 -m pip install -e .        # development install
+# or: pipx install .              # isolated CLI install
+wallclock demo                     # or: python3 -m wallclock demo
 ```
+
+The repository is a normal Python project: `pyproject.toml`, `src` = the
+`wallclock/` package, `tests/`, `examples/`, `docs/`, CI workflow, changelog and
+contributor guide. Nothing outside the standard library is required at runtime.
 
 Optional, for the differential test suite only: `python-dateutil`, `croniter`
 (`python3 -m pip install -e '.[test]'`).
@@ -70,8 +75,11 @@ Optional, for the differential test suite only: `python-dateutil`, `croniter`
 | --- | --- | --- |
 | `max_gap` | `26h` | no two consecutive runs are further apart than this |
 | `local_window` | `08:00-10:00` | every run's **effective** local time-of-day is inside the window |
+| `forbidden_window` | `22:00-06:00` | no run may land inside this range (may cross midnight) |
 | `min_per_day` | `1` | every fully covered local date has at least N runs |
 | `max_per_day` | `1` | ... and at most N |
+| `min_per_week` | `5` | every fully covered ISO week (Mon-Sun) has at least N runs |
+| `max_per_week` | `5` | ... and at most N |
 | `max_drift` | `0s` | a run may not land further than this from the wall clock it asked for |
 
 Durations accept `30s`, `90m`, `26h`, `1d2h`, `2w`, `5y`. Contracts can come
@@ -133,6 +141,38 @@ A code review of a crontab change should not require mentally simulating tzdata.
 This answers "what runs differently in the next year", including the one run that
 the new expression *rescues*.
 
+## Reviewing a change
+
+Putting contracts on a `diff` turns "31 runs moved by 30 minutes" into a verdict
+the reviewer can act on -- the same checker judges both sides:
+
+```console
+$ wallclock diff --a-cron '30 2 * * *' --b-cron '30 3 * * *' --tz Europe/Berlin \
+    --from 2026-01-01 --to 2027-01-01 --min-per-day 1 --fail-on regression
+contracts: min_per_day: 1
+verdict: regressed (a PASS -> b FAIL)
+...
+0 unchanged, contracts: FAIL -> PASS (improved), 364 moved (1h, 2h), 1 added
+```
+
+Verdicts are `improved`, `regressed`, `unchanged-pass` or `both-fail`. Note the
+`2h` move on the autumn day: "30 minutes later" is not 30 minutes later in
+absolute time when the wall clock repeats.
+
+## Exit codes and CI
+
+| command | code | meaning |
+| --- | --- | --- |
+| `check` | 0 / 1 / 2 | contracts hold / findings at or above `--fail-on` / bad input |
+| `diff` | 0 / 1 / 2 | no regression (or `--fail-on` not tripped) / tripped / bad input |
+| `scan` | 0 / 1 / 2 | nothing to report / `--fail-on error` and a zone violates / bad input |
+| `repair` | 0 / 1 / 2 | original passes / it does not (candidates are still printed) |
+
+`check --fail-on error|warning|never` (default `error`), `diff --fail-on
+none|error|regression` (default `none`), `scan --fail-on never|error` (default
+`never`). `warning` is what you want when cron's DOM/DOW OR ambiguity should
+block a merge.
+
 ## Which timezones break this schedule?
 
 ```console
@@ -165,7 +205,7 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 
 ## Validation
 
-* **204 tests, 4.7 s.** `python3 -m pytest`.
+* **221 tests, 6.1 s.** `python3 -m pytest`.
 * **RRULE ↔ dateutil**: 250 randomly generated rules, byte-identical sequences
   over a two-year horizon.
 * **cron ↔ croniter**: 150 random expressions, identical over 60 days.
@@ -176,9 +216,9 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 * **Properties**: window partitioning conserves runs; widening `max_gap` never
   creates violations; `diff(s, s)` is empty.
 
-Benchmark (`python3 scripts/bench.py`, 4-core VM, tzdata 2026e): ~36 ms per
-zone-year including contracts; 10 years of a daily job in 383 ms; all 599 zones
-× 1 year (218k runs) in 14.8 s.
+Benchmark (`python3 scripts/bench.py`, 4-core VM, tzdata 2026e): ~33 ms per
+zone-year including contracts; 10 years of a daily job in 331 ms; all 599 zones
+× 1 year (218k runs) in 13.3 s.
 
 ## Things this build found that you may not expect
 
@@ -213,7 +253,8 @@ file.
 * No catch-up/backfill semantics (a daemon that runs missed jobs later is a
   different model), no leap seconds.
 * `min_per_day`/`max_per_day` only consider local dates fully covered by the
-  window.
+  window; `min_per_week`/`max_per_week` only consider ISO weeks that are fully
+  covered *and* fully inside a finite rule's active range.
 * Forecasts inherit the installed tzdata; 20+-year horizons are projections.
 * Repairs are a bounded search, not a solver.
 * A window that would produce more than 1.5M runs is refused rather than
@@ -222,6 +263,9 @@ file.
 ## Layout
 
 ```
+examples/              runnable YAML configs (one fails on purpose, one fixes it)
+CHANGELOG.md           what changed, per release
+CONTRIBUTING.md        how to add a contract or an anomaly
 wallclock/tz.py        transitions (to the second) + gap/overlap resolution policies
 wallclock/cron.py      Vixie cron parser/expander, including the DOM/DOW OR trap
 wallclock/rrule.py      RFC 5545 subset, BYSETPOS, WKST, COUNT/UNTIL
@@ -231,7 +275,7 @@ wallclock/diff.py      semantic diff of two schedules
 wallclock/repair.py    verified repair synthesis
 wallclock/report.py    text / JSON / self-contained HTML timeline / .ics
 wallclock/cli.py       the `wallclock` command
-tests/                 204 tests, including the differential oracles
+tests/                 221 tests, including the differential oracles
 scripts/bench.py       the benchmark table above
 docs/MODEL.md          formal model, scope of the guarantee, assumptions
 ```

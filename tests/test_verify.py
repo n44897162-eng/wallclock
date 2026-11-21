@@ -272,3 +272,72 @@ def test_simulate_budget_is_enforced() -> None:
     s = Schedule.from_cron("0 * * * *", "UTC")
     with pytest.raises(HorizonError, match="more than"):
         verify(s, [], u(2026, 1, 1), u(2026, 2, 1), max_firings=100)
+
+
+# -- weekly and forbidden-window contracts ---------------------------------
+def test_min_per_week_passes_for_a_daily_job() -> None:
+    s = Schedule.from_cron("0 12 * * *", "UTC")
+    # exactly one full ISO week inside the window
+    report = verify(s, [{"min_per_week": 7}], u(2026, 1, 5), u(2026, 1, 12))
+    assert report.ok
+
+
+def test_min_per_week_flags_a_weekly_job() -> None:
+    s = Schedule.from_cron("0 9 * * 1", "UTC")  # Mondays only
+    report = verify(s, [{"min_per_week": 2}], u(2026, 1, 1), u(2026, 2, 1))
+    weeks = [f for f in report.findings if f.code == "min_per_week"]
+    assert weeks and all(f.evidence["runs"] == 1 for f in weeks)
+
+
+def test_partial_iso_weeks_are_not_judged() -> None:
+    s = Schedule.from_cron("0 12 * * *", "UTC")
+    # a 10-day window contains no complete ISO week (Mon..Sun)
+    report = verify(s, [{"min_per_week": 7}], u(2026, 1, 1), u(2026, 1, 11))
+    assert not [f for f in report.findings if f.code == "min_per_week"]
+
+
+def test_max_per_week_flags_a_daily_job() -> None:
+    s = Schedule.from_cron("0 12 * * *", "UTC")
+    report = verify(s, [{"max_per_week": 6}], u(2026, 1, 5), u(2026, 1, 12))
+    assert [f for f in report.findings if f.code == "max_per_week"][0].evidence["runs"] == 7
+
+
+def test_weekly_contract_respects_finite_rules() -> None:
+    s = Schedule.from_rrule("FREQ=DAILY;UNTIL=20260107T120000", "2026-01-01T12:00", "UTC")
+    report = verify(s, [{"min_per_week": 7}], u(2026, 1, 1), u(2026, 2, 1))
+    # the rule ends on Jan 7, so later weeks have no runs and are not judged
+    assert not [f for f in report.findings if f.code == "min_per_week"]
+
+
+def test_forbidden_window_catches_a_midnight_job() -> None:
+    s = Schedule.from_cron("0 2 * * *", "UTC")
+    report = verify(s, [{"forbidden_window": "00:00-04:00"}], u(2026, 1, 1), u(2026, 1, 8))
+    assert len([f for f in report.findings if f.code == "forbidden_window"]) == 7
+
+
+def test_forbidden_window_can_cross_midnight() -> None:
+    s = Schedule.from_cron("0 2 * * *", "UTC")
+    report = verify(s, [{"forbidden_window": "22:00-06:00"}], u(2026, 1, 1), u(2026, 1, 4))
+    assert len([f for f in report.findings if f.code == "forbidden_window"]) == 3
+
+
+def test_forbidden_window_lets_a_safe_job_through() -> None:
+    s = Schedule.from_cron("0 9 * * *", "UTC")
+    report = verify(s, [{"forbidden_window": "00:00-04:00"}], u(2026, 1, 1), u(2026, 1, 8))
+    assert report.ok
+
+
+def test_forbidden_window_sees_utc_anchored_drift() -> None:
+    s = Schedule.from_cron("0 2 * * *", "Europe/Berlin", anchor="utc")
+    report = verify(s, [{"forbidden_window": "04:00-05:00"}], u(2026, 1, 1), u(2026, 12, 31))
+    hits = [f for f in report.findings if f.code == "forbidden_window"]
+    assert hits and len(hits) < 200  # only the summer half lands at 04:30
+
+
+def test_new_contract_validation() -> None:
+    with pytest.raises(SpecError):
+        parse_contract({"forbidden_window": "08:00-08:00"})
+    with pytest.raises(SpecError):
+        parse_contract({"min_per_week": -1})
+    with pytest.raises(SpecError):
+        parse_contract({"local_window": "22:00-02:00"})  # still refuses to wrap

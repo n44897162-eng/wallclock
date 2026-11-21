@@ -1,0 +1,4 @@
+include README.md LICENSE CHANGELOG.md
+include docs/*.md
+recursive-include examples *.yaml *.yml *.md
+recursive-include demo *.html *.ics

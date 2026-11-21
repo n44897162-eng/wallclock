@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from .schedule import Firing, Schedule
-from .verify import format_duration, simulate
+from .verify import Report, format_duration, parse_contract, simulate, verify
 
 
 @dataclass
@@ -32,6 +32,23 @@ class Diff:
     added: list[Firing] = field(default_factory=list)
     removed: list[Firing] = field(default_factory=list)
     tolerance: timedelta = timedelta(hours=3)
+    contracts: list = field(default_factory=list)
+    report_a: Report | None = None
+    report_b: Report | None = None
+
+    @property
+    def verdict(self) -> str:
+        """Contract verdict across the change (needs contracts to be supplied)."""
+        if self.report_a is None or self.report_b is None:
+            return "n/a"
+        a_ok, b_ok = self.report_a.ok, self.report_b.ok
+        if a_ok and b_ok:
+            return "unchanged-pass"
+        if not a_ok and b_ok:
+            return "improved"
+        if a_ok and not b_ok:
+            return "regressed"
+        return "both-fail"
 
     @property
     def changed(self) -> int:
@@ -39,6 +56,11 @@ class Diff:
 
     def summary(self) -> str:
         bits = [f"{len(self.common)} unchanged"]
+        if self.report_a is not None and self.report_b is not None:
+            bits.append(
+                f"contracts: {'PASS' if self.report_a.ok else 'FAIL'} -> "
+                f"{'PASS' if self.report_b.ok else 'FAIL'} ({self.verdict})"
+            )
         if self.moved:
             deltas = sorted({d for _, _, d in self._moved_with_delta()})
             bits.append(f"{len(self.moved)} moved ({', '.join(format_duration(d) for d in deltas[:3])})")
@@ -69,18 +91,45 @@ class Diff:
             ],
             "added": [f.utc.isoformat() for f in self.added[:20]],
             "removed": [f.utc.isoformat() for f in self.removed[:20]],
+            "verdict": self.verdict,
+            "contracts": [
+                {
+                    "contract": c.describe(),
+                    "a_ok": self.report_a.ok if self.report_a else None,
+                    "b_ok": self.report_b.ok if self.report_b else None,
+                    "a_errors": len(self.report_a.errors) if self.report_a else None,
+                    "b_errors": len(self.report_b.errors) if self.report_b else None,
+                }
+                for c in self.contracts
+            ],
         }
 
 
-def diff(a: Schedule, b: Schedule, lo: datetime, hi: datetime, tolerance: timedelta = timedelta(hours=3)) -> Diff:
-    """Compare the firings of two schedules over one window."""
+def diff(
+    a: Schedule,
+    b: Schedule,
+    lo: datetime,
+    hi: datetime,
+    tolerance: timedelta = timedelta(hours=3),
+    contracts: Sequence = (),
+) -> Diff:
+    """Compare the firings of two schedules over one window.
+
+    Supplying contracts turns the diff into a review verdict: the same checker
+    judges both sides, so a change is called "regressed" only when a contract
+    that used to hold stops holding.
+    """
     if lo.tzinfo is None or hi.tzinfo is None:
         from .errors import HorizonError
 
         raise HorizonError("diff() needs timezone-aware bounds")
     fa = simulate(a, lo, hi).firings
     fb = simulate(b, lo, hi).firings
-    out = Diff(a, b, lo, hi, tolerance=tolerance)
+    parsed = [c if hasattr(c, "check") else parse_contract(c) for c in contracts]
+    out = Diff(a, b, lo, hi, tolerance=tolerance, contracts=parsed)
+    if parsed:
+        out.report_a = verify(a, parsed, lo, hi)
+        out.report_b = verify(b, parsed, lo, hi)
 
     b_by_instant = {f.utc: f for f in fb}
     unmatched_a: list[Firing] = []

@@ -1,0 +1,26 @@
+name: Feature request
+description: A contract, format or workflow that is missing
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The scheduling promise you cannot express today
+      placeholder: |
+        "The report must exist before 09:00 local on every business day, and
+        never more than 26 hours after the previous one."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to write
+      render: yaml
+      placeholder: |
+        contracts:
+          - max_gap: 26h
+          - local_window: 08:00-09:00
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you tried

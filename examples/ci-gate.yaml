@@ -1,0 +1,14 @@
+# A weekday job that must never drift into the night.
+# `--fail-on warning` turns spec hazards (like cron's DOM/DOW OR) into failures.
+schedule:
+  cron: "0 9 * * 1-5"
+  timezone: Europe/London
+
+contracts:
+  - min_per_week: 5
+  - forbidden_window: "22:00-06:00"
+  - max_gap: 72h
+
+window:
+  from: 2026-01-01
+  to: 2026-04-01

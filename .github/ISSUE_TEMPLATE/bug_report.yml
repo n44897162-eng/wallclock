@@ -1,0 +1,42 @@
+name: Bug report
+description: Something behaves differently from what the README promises
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The two things that make scheduling bugs
+        reproducible are the **exact schedule** and the **timezone**.
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or code
+      description: The smallest thing that shows the problem.
+      render: shell
+      placeholder: |
+        wallclock check --cron '30 2 * * *' --tz Europe/Berlin \
+          --from 2026-03-01 --to 2026-04-01 --min-per-day 1
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: input
+    id: tzdata
+    attributes:
+      label: tzdata version
+      description: "`python -c 'from wallclock import tzdata_version; print(tzdata_version())'`"
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: "3.12.4 / Ubuntu 24.04"
+  - type: textarea
+    id: report
+    attributes:
+      label: Relevant output
+      description: Text output or the JSON from `--format json`.
+      render: text
