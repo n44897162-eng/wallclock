@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
 - **`--fail-on` for `check`**: `error` (default), `warning`, or `never`.
 - **`scan` accepts contracts** and ranks zones by contract violations, showing
   the first witness per zone; `--fail-on error` for CI.
+- **`wallclock explain <code>`**: one entry per contract and finding, with a
+  runnable example; `--list` and `--format json` for tooling.
+- **`--format markdown`** for `check`: a compact table meant to be pasted into a
+  pull request.
 - `demo` writes an `.ics` of the flagship case next to the HTML pages.
 
 ### Changed

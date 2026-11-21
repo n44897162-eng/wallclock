@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pytest
 
 from wallclock.cli import main
-from wallclock.report import render_html, render_ics, render_json, render_text
+from wallclock.report import render_html, render_ics, render_json, render_markdown, render_text
 from wallclock.schedule import Schedule
 from wallclock.verify import horizon, verify
 
@@ -265,3 +265,60 @@ def test_cli_new_weekly_contract_flags(capsys) -> None:
                  "--from", "2026-01-01", "--to", "2026-02-01"])
     assert code == 1
     assert "min_per_week" in capsys.readouterr().out
+
+
+# -- markdown and explain (v0.2) -------------------------------------------
+def test_markdown_report_structure() -> None:
+    text = render_markdown(sample_report())
+    assert text.startswith("## wallclock: FAIL")
+    assert "| severity | code | finding |" in text
+    assert "`max_gap`" in text and "`min_per_day`" in text
+    assert "exhaustive" in text.lower()
+
+
+def test_markdown_report_pass_has_no_table_rows() -> None:
+    s = Schedule.from_cron("0 12 * * *", "UTC")
+    lo, hi = horizon("UTC", "2026-01-01", "2026-02-01")
+    text = render_markdown(verify(s, [{"min_per_day": 1}], lo, hi))
+    assert "PASS" in text and "no findings" in text
+
+
+def test_markdown_escapes_pipes_and_newlines() -> None:
+    report = sample_report()
+    from wallclock.verify import Finding
+
+    report.findings.append(Finding("demo", "warning", "a | b\nc"))
+    text = render_markdown(report)
+    assert "a \\| b c" in text
+
+
+def test_cli_markdown_out(tmp_path) -> None:
+    target = tmp_path / "report.md"
+    code = main(["check", "--cron", "30 2 * * *", "--tz", "Europe/Berlin",
+                 "--from", "2026-03-01", "--to", "2026-04-01", "--min-per-day", "1",
+                 "--format", "markdown", "--out", str(target)])
+    assert code == 1
+    assert target.read_text().startswith("## wallclock: FAIL")
+
+
+def test_cli_explain_list(capsys) -> None:
+    assert main(["explain", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "max_gap" in out and "skipped_occurrence" in out and "forbidden_window" in out
+
+
+def test_cli_explain_code(capsys) -> None:
+    assert main(["explain", "max_gap"]) == 0
+    out = capsys.readouterr().out
+    assert "absolute time" in out and "wallclock check" in out
+
+
+def test_cli_explain_unknown_suggests(capsys) -> None:
+    assert main(["explain", "max_gapp"]) == 2
+    assert "did you mean" in capsys.readouterr().err
+
+
+def test_cli_explain_json(capsys) -> None:
+    assert main(["explain", "skipped_occurrence", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["kind"] == "finding" and payload["code"] == "skipped_occurrence"

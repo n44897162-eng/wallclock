@@ -58,6 +58,7 @@ def render_text(report: Report, max_findings: int = 40) -> str:
     if not report.findings:
         lines.append("no findings: every contract holds for every run in the window.")
         return "\n".join(lines)
+    hint = "hint: `wallclock explain <code>` explains what a code means."
     shown = 0
     for sev in ("error", "warning", "info"):
         group = [f for f in report.findings if f.severity == sev]
@@ -72,11 +73,48 @@ def render_text(report: Report, max_findings: int = 40) -> str:
             lines.append(f"{f.code}{when}: {f.message}")
             shown += 1
         lines.append("")
+    lines.append(hint)
     return "\n".join(lines)
 
 
 def render_json(report: Report, indent: int = 2) -> str:
     return json.dumps(report.to_dict(), indent=indent, ensure_ascii=False)
+
+
+def render_markdown(report: Report, max_findings: int = 50) -> str:
+    """A compact report meant to be pasted into a pull request."""
+    sim = report.simulation
+    verdict = "PASS" if report.ok else "FAIL"
+    lines = [
+        f"## wallclock: {verdict}",
+        "",
+        f"`{sim.schedule.describe()}`",
+        "",
+        f"- window: `{_iso(sim.lo)}` -> `{_iso(sim.hi)}` (tzdata `{report.tzdata or 'unknown'}`)",
+        f"- runs: {len(sim.firings)} | skipped: {len(sim.skipped)} | "
+        f"errors: {len(report.errors)} | warnings: {len(report.warnings)}",
+    ]
+    if report.contracts:
+        lines.append("- contracts: " + ", ".join(f"`{c.describe()}`" for c in report.contracts))
+    lines += [
+        "",
+        "| severity | code | finding |",
+        "| --- | --- | --- |",
+    ]
+    if report.findings:
+        for finding in report.findings[:max_findings]:
+            lines.append(f"| {finding.severity} | `{finding.code}` | {_md_cell(finding.message)} |")
+        extra = len(report.findings) - max_findings
+        if extra > 0:
+            lines.append(f"| | | ... {extra} more; use `--format json` for everything |")
+    else:
+        lines.append("| - | - | no findings: every contract holds for every run in the window |")
+    lines += ["", "_Exhaustive over the window. `wallclock explain <code>` explains a code._"]
+    return "\n".join(lines)
+
+
+def _md_cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
 
 
 # ---------------------------------------------------------------------------

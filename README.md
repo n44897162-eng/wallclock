@@ -173,6 +173,26 @@ none|error|regression` (default `none`), `scan --fail-on never|error` (default
 `never`). `warning` is what you want when cron's DOM/DOW OR ambiguity should
 block a merge.
 
+## Understanding a finding
+
+Every code is explained in place, with a command that demonstrates it:
+
+```console
+$ wallclock explain skipped_occurrence
+skipped_occurrence  [finding]
+  a wall-clock time did not exist, so the occurrence was dropped
+
+  A spring-forward gap. Findings are grouped per gap: one finding carries the count and
+  the first/last local time. If the rule has COUNT, every dropped occurrence still
+  consumes one of the quota.
+
+  example: wallclock check --cron '* * * * *' --tz Europe/Berlin --from 2026-03-29 --to 2026-03-30
+```
+
+`wallclock explain --list` shows every contract and finding code; `--format json` is for
+tooling. Reports are available as `text` (default), `markdown` (a table to paste into a
+pull request), `json`, and `html` (self-contained timeline).
+
 ## Which timezones break this schedule?
 
 ```console
@@ -205,7 +225,7 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 
 ## Validation
 
-* **221 tests, 6.1 s.** `python3 -m pytest`.
+* **229 tests, 5.8 s.** `python3 -m pytest`.
 * **RRULE ↔ dateutil**: 250 randomly generated rules, byte-identical sequences
   over a two-year horizon.
 * **cron ↔ croniter**: 150 random expressions, identical over 60 days.
@@ -273,9 +293,10 @@ wallclock/schedule.py  rule + zone + policy -> firings (and the ones that vanish
 wallclock/verify.py    contracts, anomalies, exhaustive verification, reports
 wallclock/diff.py      semantic diff of two schedules
 wallclock/repair.py    verified repair synthesis
-wallclock/report.py    text / JSON / self-contained HTML timeline / .ics
+wallclock/report.py    text / markdown / JSON / self-contained HTML timeline / .ics
+wallclock/explain.py   the definition behind every contract and finding code
 wallclock/cli.py       the `wallclock` command
-tests/                 221 tests, including the differential oracles
+tests/                 229 tests, including the differential oracles
 scripts/bench.py       the benchmark table above
 docs/MODEL.md          formal model, scope of the guarantee, assumptions
 ```

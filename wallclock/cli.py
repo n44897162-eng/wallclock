@@ -24,7 +24,7 @@ from . import __version__
 from .diff import diff as diff_schedules
 from .errors import WallclockError
 from .repair import repair as repair_schedule
-from .report import render_html, render_ics, render_json, render_text
+from .report import render_html, render_ics, render_json, render_markdown, render_text
 from .schedule import Schedule
 from .tz import AMBIGUOUS_POLICIES, GAP_POLICIES, UTC, Policy, format_offset, get_zone, list_zones
 from .verify import (
@@ -101,7 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
     con.add_argument("--spec", help="inline JSON with schedule/contracts/window")
 
     out = argparse.ArgumentParser(add_help=False)
-    out.add_argument("--format", choices=("text", "json", "html"), default="text")
+    out.add_argument("--format", choices=("text", "json", "html", "markdown"), default="text")
     out.add_argument("--out", help="write the report to a file instead of stdout")
     out.add_argument("--ics", help="also write the firings as an .ics calendar")
 
@@ -153,6 +153,13 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--format", choices=("text", "json"), default="text")
     sc.add_argument("--out")
     sc.set_defaults(func=cmd_scan)
+
+    ex = sub.add_parser("explain", help="explain a contract or finding code")
+    ex.add_argument("code", nargs="?", help="e.g. max_gap or skipped_occurrence")
+    ex.add_argument("--list", action="store_true", help="list every code")
+    ex.add_argument("--format", choices=("text", "json"), default="text")
+    ex.add_argument("--out")
+    ex.set_defaults(func=cmd_explain)
 
     dm = sub.add_parser("demo", help="run the built-in tour")
     dm.add_argument("--out", help="directory for the HTML tour (index.html + one page per case)")
@@ -348,6 +355,19 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 1 if args.fail_on == "error" and any(r["violations"] for r in rows) else 0
 
 
+def cmd_explain(args: argparse.Namespace) -> int:
+    from . import explain as explain_mod
+
+    if args.format == "json":
+        text = explain_mod.render_json(None if (args.list or not args.code) else args.code)
+    elif args.list or not args.code:
+        text = explain_mod.render_list()
+    else:
+        text = explain_mod.render(explain_mod.lookup(args.code))
+    _write(text + "\n", args.out)
+    return 0
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     from .demo import run_demo
 
@@ -472,6 +492,8 @@ def _emit_report(report, args: argparse.Namespace) -> None:
         text = render_json(report)
     elif args.format == "html":
         text = render_html(report)
+    elif args.format == "markdown":
+        text = render_markdown(report)
     else:
         text = render_text(report)
     _write(text + "\n", args.out)
