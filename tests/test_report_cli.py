@@ -188,3 +188,19 @@ def test_cli_demo_html(tmp_path, capsys) -> None:
     index = tmp_path / "index.html"
     assert index.exists()
     assert len(list(tmp_path.glob("*.html"))) >= 7
+
+def test_cli_scan(capsys) -> None:
+    code = main(["scan", "--cron", "30 2 * * *", "--from", "2026-03-01", "--to", "2026-04-01"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "scanned" in out and "skip at least one occurrence" in out
+    assert "Europe/Berlin" in out
+    assert "America/Santiago" not in out  # Chile's transition is at midnight, not 02:30
+
+
+def test_cli_scan_json(capsys) -> None:
+    code = main(["scan", "--cron", "0 0 * * *", "--from", "2026-08-15", "--to", "2026-10-01",
+                 "--format", "json"])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert any(z["zone"] == "America/Santiago" for z in payload["zones"])

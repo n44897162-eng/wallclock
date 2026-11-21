@@ -32,10 +32,28 @@ from .verify import (
     horizon,
     parse_contract,
     parse_duration,
+    simulate,
     verify,
 )
 
 CONFIG_SUFFIXES = (".yaml", ".yml", ".json")
+
+#: a broad but fast default for `wallclock scan`
+MAJOR_ZONES = [
+    "UTC", "Europe/London", "Europe/Dublin", "Europe/Lisbon", "Europe/Paris",
+    "Europe/Berlin", "Europe/Madrid", "Europe/Rome", "Europe/Amsterdam",
+    "Europe/Stockholm", "Europe/Warsaw", "Europe/Athens", "Europe/Helsinki",
+    "Europe/Kyiv", "Europe/Istanbul", "Europe/Moscow", "Africa/Cairo",
+    "Africa/Lagos", "Africa/Johannesburg", "Africa/Nairobi", "Asia/Jerusalem",
+    "Asia/Dubai", "Asia/Karachi", "Asia/Kolkata", "Asia/Kathmandu", "Asia/Dhaka",
+    "Asia/Bangkok", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Singapore",
+    "Asia/Tokyo", "Asia/Seoul", "Australia/Perth", "Australia/Adelaide",
+    "Australia/Brisbane", "Australia/Sydney", "Australia/Lord_Howe",
+    "Pacific/Auckland", "Pacific/Chatham", "Pacific/Apia", "Pacific/Honolulu",
+    "America/Anchorage", "America/Los_Angeles", "America/Denver",
+    "America/Chicago", "America/New_York", "America/St_Johns",
+    "America/Sao_Paulo", "America/Argentina/Buenos_Aires", "America/Santiago",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
     z.add_argument("--months", type=int, default=12)
     z.add_argument("--out")
     z.set_defaults(func=cmd_zones)
+
+    sc = sub.add_parser("scan", parents=[sch, win], help="which timezones break this schedule?")
+    sc.add_argument("--all", action="store_true", help="scan all 599 zones instead of ~50 major ones")
+    sc.add_argument("--format", choices=("text", "json"), default="text")
+    sc.add_argument("--out")
+    sc.set_defaults(func=cmd_scan)
 
     dm = sub.add_parser("demo", help="run the built-in tour")
     dm.add_argument("--out", help="directory for the HTML tour (index.html + one page per case)")
@@ -247,6 +271,42 @@ def cmd_zones(args: argparse.Namespace) -> int:
             f"{format_offset(tr.before)} -> {format_offset(tr.after)}  "
             f"({format_duration(tr.gap)} gap/repeat)"
         )
+    _write("\n".join(lines) + "\n", args.out)
+    return 0
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    zones = list_zones() if args.all else MAJOR_ZONES
+    lo, hi = _window(args, "UTC", None)
+    rows = []
+    for name in zones:
+        try:
+            schedule = _build_schedule(args.cron, args.rrule, args.dtstart, name,
+                                       _policy(args), args.anchor, "scan")
+        except WallclockError:
+            continue
+        sim = simulate(schedule, lo, hi)
+        if sim.skipped:
+            rows.append((len(sim.skipped), len(sim.firings), name))
+    rows.sort(key=lambda row: (-row[0], row[2]))
+    if args.format == "json":
+        payload = {
+            "window": {"from": _iso(lo), "to": _iso(hi)},
+            "scanned": len(zones),
+            "affected": len(rows),
+            "zones": [{"zone": z, "skipped": s, "runs": r} for s, r, z in rows],
+        }
+        _write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", args.out)
+        return 0
+    lines = [
+        f"scanned {len(zones)} zones, {_iso(lo)} .. {_iso(hi)}",
+        f"{len(rows)} zone(s) skip at least one occurrence",
+        "",
+    ]
+    for skipped, runs, name in rows:
+        lines.append(f"  {name:28s} {skipped:3d} skipped   {runs:5d} runs")
+    if not rows:
+        lines.append("  this schedule survives every scanned timezone in the window")
     _write("\n".join(lines) + "\n", args.out)
     return 0
 

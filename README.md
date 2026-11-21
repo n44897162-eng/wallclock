@@ -132,6 +132,21 @@ A code review of a crontab change should not require mentally simulating tzdata.
 This answers "what runs differently in the next year", including the one run that
 the new expression *rescues*.
 
+## Which timezones break this schedule?
+
+```console
+$ wallclock scan --cron '30 2 * * *' --from 2026-03-01 --to 2026-04-01
+scanned 50 zones, 2026-03-01T00:00:00Z .. 2026-04-01T00:00:00Z
+14 zone(s) skip at least one occurrence
+
+  America/Anchorage              1 skipped      30 runs
+  ...
+  Europe/Berlin                  1 skipped      30 runs
+```
+
+Same job, different blast radius per region. `--all` scans all 599 zones
+(~15 s); `--format json` for CI.
+
 ## What "verified" means here
 
 The window is finite, so verification is not sampling: every recurrence the rule
@@ -147,7 +162,7 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 
 ## Validation
 
-* **198 tests, 4.3 s.** `python3 -m pytest`.
+* **200 tests, 4.5 s.** `python3 -m pytest`.
 * **RRULE ↔ dateutil**: 250 randomly generated rules, byte-identical sequences
   over a two-year horizon.
 * **cron ↔ croniter**: 150 random expressions, identical over 60 days.
@@ -211,7 +226,7 @@ wallclock/diff.py      semantic diff of two schedules
 wallclock/repair.py    verified repair synthesis
 wallclock/report.py    text / JSON / self-contained HTML timeline / .ics
 wallclock/cli.py       the `wallclock` command
-tests/                 198 tests, including the differential oracles
+tests/                 200 tests, including the differential oracles
 scripts/bench.py       the benchmark table above
 docs/MODEL.md          formal model, scope of the guarantee, assumptions
 ```
