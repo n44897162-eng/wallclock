@@ -145,8 +145,10 @@ scanned 50 zones, 2026-03-01T00:00:00Z .. 2026-04-01T00:00:00Z
   Europe/Berlin                  1 skipped      30 runs
 ```
 
-Same job, different blast radius per region. `--all` scans all 599 zones
-(~15 s); `--format json` for CI.
+Same job, different blast radius per region: `--all` puts **131 of 599 zones**
+on the list for March 2026 alone (Morocco's Ramadan shift, the usual northern
+and southern spring changes, Chatham's 45-minute offset...). `--all` takes ~15 s
+for a year; `--format json` for CI.
 
 ## What "verified" means here
 
@@ -163,7 +165,7 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 
 ## Validation
 
-* **204 tests, 4.6 s.** `python3 -m pytest`.
+* **204 tests, 4.7 s.** `python3 -m pytest`.
 * **RRULE ↔ dateutil**: 250 randomly generated rules, byte-identical sequences
   over a two-year horizon.
 * **cron ↔ croniter**: 150 random expressions, identical over 60 days.
