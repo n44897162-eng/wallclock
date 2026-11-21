@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lord Howe Island, 02:15 daily</title>
+<style>
+ :root { color-scheme: dark; }
+ body { margin:0; padding:32px; background:#0b1020; color:#e5e7eb;
+        font:15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+ h1 { font-size:22px; margin:0 0 4px; letter-spacing:.2px; }
+ .sub { color:#94a3b8; margin-bottom:24px; }
+ .verdict { display:inline-block; padding:2px 10px; border-radius:999px; font-weight:700;
+             background:#f8717122; color:#f87171; border:1px solid #f8717155; }
+ .grid { display:grid; grid-template-columns:repeat(4, minmax(120px, 1fr)); gap:12px; margin:20px 0 28px; }
+ .card { background:#111a2e; border:1px solid #1e293b; border-radius:12px; padding:12px 14px; }
+ .card .k { color:#94a3b8; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+ .card .v { font-size:26px; font-weight:700; margin-top:2px; }
+ table { width:100%; border-collapse:collapse; margin-top:10px; font-size:14px; }
+ th { text-align:left; color:#94a3b8; font-weight:600; border-bottom:1px solid #1e293b; padding:8px; }
+ td { border-bottom:1px solid #16233a; padding:8px; vertical-align:top; }
+ .sev { font-weight:700; text-transform:uppercase; font-size:12px; }
+ .dim { color:#64748b; white-space:nowrap; }
+ code { background:#0f172a; border:1px solid #1e293b; border-radius:6px; padding:1px 5px; }
+ h2 { font-size:16px; margin:30px 0 8px; color:#cbd5e1; }
+ .panel { background:#0f172a; border:1px solid #1e293b; border-radius:14px; padding:10px 12px 4px; margin:14px 0; }
+ .legend { color:#94a3b8; font-size:12.5px; margin:6px 0 12px; }
+ footer { color:#64748b; font-size:12.5px; margin-top:28px; }
+</style></head><body>
+<h1>wallclock <span class="verdict">FAIL</span></h1>
+<div class="sub">cron &#x27;15 2 * * *&#x27; in Australia/Lord_Howe (gap=skip, ambiguous=earlier) &middot; 2026-09-19T13:30:00Z &rarr; 2026-10-19T13:00:00Z
+ &middot; tzdata 2026e</div>
+<div class="grid"><div class='card'><div class='k'>runs</div><div class='v'>29</div></div><div class='card'><div class='k'>skipped</div><div class='v'>1</div></div><div class='card'><div class='k'>errors</div><div class='v'>1</div></div><div class='card'><div class='k'>warnings</div><div class='v'>1</div></div></div>
+<h2>Contracts</h2>
+<ul><li><code>max_gap: 1d1h</code></li></ul>
+<h2>Timeline</h2>
+<div class="legend">green = normal run &middot; amber = run on a repeated or shifted wall-clock time
+ &middot; red cross = occurrence that never happened &middot; red band = wall-clock time that did not exist
+ &middot; amber band = wall-clock time that happened twice</div>
+<div class='panel'><div style='font-weight:600;margin:4px 0 2px'>Australia/Lord_Howe: clocks jump +10:30 &rarr; +11:00 at 2026-10-03T15:30:00Z</div><div class='dim' style='font-size:12px'>wall-clock time skipped; axis labels are local wall clock</div><svg viewBox='0 0 960 142' width='100%' role='img' aria-label='Australia/Lord_Howe: clocks jump +10:30 &amp;rarr; +11:00 at 2026-10-03T15:30:00Z'><rect x='480.0' y='30' width='6.3' height='82' fill='#f8717122' stroke='#f8717166' /><line x1='26' y1='96' x2='934' y2='96' stroke='#334155' /><line x1='57.5' y1='92' x2='57.5' y2='100' stroke='#475569' /><text x='57.5' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-02 16:30</text><line x1='133.2' y1='92' x2='133.2' y2='100' stroke='#475569' /><text x='133.2' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-02 22:30</text><line x1='208.9' y1='92' x2='208.9' y2='100' stroke='#475569' /><text x='208.9' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-03 04:30</text><line x1='284.5' y1='92' x2='284.5' y2='100' stroke='#475569' /><text x='284.5' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-03 10:30</text><line x1='360.2' y1='92' x2='360.2' y2='100' stroke='#475569' /><text x='360.2' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-03 16:30</text><line x1='435.9' y1='92' x2='435.9' y2='100' stroke='#475569' /><text x='435.9' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-03 22:30</text><line x1='511.5' y1='92' x2='511.5' y2='100' stroke='#475569' /><text x='511.5' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-04 05:00</text><line x1='587.2' y1='92' x2='587.2' y2='100' stroke='#475569' /><text x='587.2' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-04 11:00</text><line x1='662.9' y1='92' x2='662.9' y2='100' stroke='#475569' /><text x='662.9' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-04 17:00</text><line x1='738.5' y1='92' x2='738.5' y2='100' stroke='#475569' /><text x='738.5' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-04 23:00</text><line x1='814.2' y1='92' x2='814.2' y2='100' stroke='#475569' /><text x='814.2' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-05 05:00</text><line x1='889.9' y1='92' x2='889.9' y2='100' stroke='#475569' /><text x='889.9' y='114' fill='#64748b' font-size='11' text-anchor='middle'>10-05 11:00</text><circle cx='180.5' cy='72' r='4.4' fill='#34d399'><title>2026-10-02T15:45:00+00:00 (normal)</title></circle><circle cx='779.5' cy='72' r='4.4' fill='#34d399'><title>2026-10-04T15:15:00+00:00 (normal)</title></circle><g><line x1='478.2' y1='67' x2='488.2' y2='77' stroke='#ef4444' stroke-width='2.2'/><line x1='478.2' y1='77' x2='488.2' y2='67' stroke='#ef4444' stroke-width='2.2'/><title>skipped 2026-10-04T02:15:00</title></g></svg></div>
+<h2>Findings</h2>
+<table><thead><tr><th>severity</th><th>code</th><th>message</th><th>at (UTC)</th></tr></thead><tbody><tr><td><span class='sev' style='color:#f87171'>error</span></td><td><code>max_gap</code></td><td>gap of 1d23h30m between 2026-10-02T15:45:00Z and 2026-10-04T15:15:00Z exceeds 1d1h</td><td class='dim'>2026-10-04T15:15:00Z</td></tr><tr><td><span class='sev' style='color:#fbbf24'>warning</span></td><td><code>skipped_occurrence</code></td><td>2026-10-04 02:15 does not exist in Australia/Lord_Howe (clocks jump from +10:30 to +11:00 at 2026-10-03T15:30:00Z); the &#x27;skip&#x27; policy drops the run</td><td class='dim'>2026-10-03T15:30:00Z</td></tr><tr><td><span class='sev' style='color:#60a5fa'>info</span></td><td><code>utc_jitter</code></td><td>spacing of 1d23h30m between 2026-10-02T15:45:00Z and 2026-10-04T15:15:00Z differs from the usual 1d</td><td class='dim'>2026-10-04T15:15:00Z</td></tr></tbody></table>
+<footer>Generated by wallclock 0.1.0 &middot; exhaustive over the window: every recurrence was
+resolved and every run checked &middot; verdict is only as good as the tzdata shown above.</footer>
+</body></html>

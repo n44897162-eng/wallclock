@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wallclock"
+version = "0.1.0"
+description = "Temporal-contract verification for scheduled jobs: exact wall-clock simulation, proofs, counterexample witnesses, semantic diff and repair synthesis."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8", "python-dateutil>=2.8", "croniter>=2"]
+
+[project.scripts]
+wallclock = "wallclock.cli:main"
+
+[tool.setuptools]
+packages = ["wallclock"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
