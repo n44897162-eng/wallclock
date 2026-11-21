@@ -136,12 +136,20 @@ class Schedule:
         return cls.from_rrule(str(spec["rrule"]), dtstart, tz_name, policy=policy, anchor=anchor)
 
     # -- simulation --------------------------------------------------------
-    def fire(self, lo: datetime, hi: datetime) -> list[Firing]:
-        """All firings in the UTC half-open window ``[lo, hi)``."""
+    def fire(self, lo: datetime, hi: datetime, limit: int | None = None) -> list[Firing]:
+        """All firings in the UTC half-open window ``[lo, hi)``.
+
+        ``limit`` guards against accidentally materialising a minutely schedule
+        over decades; the CLI and the verifier always pass one.
+        """
         out: list[Firing] = []
         for seq, _local, resolutions in self.expand(lo, hi):
             for res in resolutions:
                 if lo <= res.utc < hi:
+                    if limit is not None and len(out) >= limit:
+                        raise HorizonError(
+                            f"more than {limit:,} runs in the window; narrow it or use --limit"
+                        )
                     out.append(
                         Firing(
                             utc=res.utc,

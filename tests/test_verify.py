@@ -239,3 +239,36 @@ def test_min_per_day_still_flags_gaps_inside_a_counted_rule() -> None:
     s = Schedule.from_rrule("FREQ=DAILY;COUNT=4", "2026-03-27T02:30", "Europe/Berlin")
     report = verify(s, [{"min_per_day": 1}], u(2026, 3, 25), u(2026, 4, 3))
     assert any(f.code == "min_per_day" and f.evidence["date"] == "2026-03-29" for f in report.findings)
+
+
+def test_skipped_occurrences_are_grouped_per_gap() -> None:
+    s = Schedule.from_cron("* * * * *", "Europe/Berlin")  # every minute
+    report = verify(s, [], u(2026, 3, 29), u(2026, 3, 30))
+    skipped = [f for f in report.findings if f.code == "skipped_occurrence"]
+    assert len(skipped) == 1
+    assert skipped[0].evidence["count"] == 60
+    assert "02:00..02:59" in skipped[0].message
+
+
+def test_whole_skipped_day_is_one_finding() -> None:
+    s = Schedule.from_cron("*/15 * * * *", "Pacific/Apia")
+    report = verify(s, [], u(2011, 12, 29), u(2011, 12, 31))
+    skipped = [f for f in report.findings if f.code == "skipped_occurrence"]
+    assert len(skipped) == 1
+    assert skipped[0].evidence["count"] == 96  # 24h at quarter-hour resolution
+
+
+def test_fire_limit_is_enforced() -> None:
+    from wallclock.errors import HorizonError
+
+    s = Schedule.from_cron("* * * * *", "UTC")
+    with pytest.raises(HorizonError, match="more than"):
+        s.fire(u(2026, 1, 1), u(2026, 1, 2), limit=10)
+
+
+def test_simulate_budget_is_enforced() -> None:
+    from wallclock.errors import HorizonError
+
+    s = Schedule.from_cron("0 * * * *", "UTC")
+    with pytest.raises(HorizonError, match="more than"):
+        verify(s, [], u(2026, 1, 1), u(2026, 2, 1), max_firings=100)

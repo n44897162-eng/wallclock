@@ -49,7 +49,8 @@ next run is 47 hours later — which is why "daily" backups turn out to be
 | Berlin, `ambiguous=both` | the repeated autumn hour runs the job **twice** | double billing / double send |
 | cron `0 0 1 * 1` | day-of-month **OR** day-of-week | 13 unintended runs a year |
 
-`python3 -m wallclock demo --out demo` writes the HTML tour (one page per case).
+`python3 -m wallclock demo --out demo` writes the HTML tour (one page per case,
+plus an `.ics` of the first case).
 
 ## Install
 
@@ -162,7 +163,7 @@ an explicit input (`gap=skip|shift_forward|shift_backward|clamp_end`,
 
 ## Validation
 
-* **200 tests, 4.5 s.** `python3 -m pytest`.
+* **204 tests, 4.6 s.** `python3 -m pytest`.
 * **RRULE ↔ dateutil**: 250 randomly generated rules, byte-identical sequences
   over a two-year horizon.
 * **cron ↔ croniter**: 150 random expressions, identical over 60 days.
@@ -213,6 +214,8 @@ file.
   window.
 * Forecasts inherit the installed tzdata; 20+-year horizons are projections.
 * Repairs are a bounded search, not a solver.
+* A window that would produce more than 1.5M runs is refused rather than
+  silently eating your RAM (`--months` down, or coarsen the rule).
 
 ## Layout
 
@@ -226,7 +229,7 @@ wallclock/diff.py      semantic diff of two schedules
 wallclock/repair.py    verified repair synthesis
 wallclock/report.py    text / JSON / self-contained HTML timeline / .ics
 wallclock/cli.py       the `wallclock` command
-tests/                 200 tests, including the differential oracles
+tests/                 204 tests, including the differential oracles
 scripts/bench.py       the benchmark table above
 docs/MODEL.md          formal model, scope of the guarantee, assumptions
 ```

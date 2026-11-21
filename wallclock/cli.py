@@ -170,7 +170,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 def cmd_sim(args: argparse.Namespace) -> int:
     schedule = _schedule_from(None, args)
     lo, hi = _window(args, schedule.zone.name, None)
-    firings = schedule.fire(lo, hi)
+    firings = schedule.fire(lo, hi, limit=1_000_000)
     if args.ics:
         Path(args.ics).write_text(render_ics(firings, schedule, name="wallclock", limit=5000), encoding="utf-8")
     if args.format == "json":

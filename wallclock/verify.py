@@ -381,7 +381,9 @@ def parse_contracts(specs: Sequence[dict | str]) -> list[Contract]:
 # ---------------------------------------------------------------------------
 # simulation + anomalies
 # ---------------------------------------------------------------------------
-def simulate(schedule: Schedule, lo: datetime, hi: datetime) -> Simulation:
+def simulate(
+    schedule: Schedule, lo: datetime, hi: datetime, max_firings: int = 1_500_000
+) -> Simulation:
     lo, hi = _aware(lo), _aware(hi)
     if hi <= lo:
         raise HorizonError("verification window is empty")
@@ -393,6 +395,11 @@ def simulate(schedule: Schedule, lo: datetime, hi: datetime) -> Simulation:
     for seq, local, resolutions in schedule.expand(lo, hi):
         recurrences += 1
         kept = [r for r in resolutions if lo <= r.utc < hi]
+        if len(firings) + len(kept) > max_firings:
+            raise HorizonError(
+                f"window produces more than {max_firings:,} runs; narrow the window "
+                f"or use a coarser schedule"
+            )
         for res in kept:
             firings.append(
                 Firing(
@@ -452,22 +459,41 @@ def detect_anomalies(sim: Simulation) -> list[Finding]:
     schedule = sim.schedule
     rrule = schedule.rrule
 
-    # 1. occurrences that never happened
+    # 1. occurrences that never happened (grouped: one finding per gap)
+    groups: dict[Transition | None, list[datetime]] = {}
     for local in sim.skipped:
-        tr = _transition_for(zone, local, sim.transitions)
-        when = f" (clocks jump from {format_offset(tr.before)} to {format_offset(tr.after)} at {_iso(tr.at)})" if tr else ""
+        groups.setdefault(_transition_for(zone, local, sim.transitions), []).append(local)
+    for tr, dropped in groups.items():
+        first, last = dropped[0], dropped[-1]
+        when = (
+            f" (clocks jump from {format_offset(tr.before)} to {format_offset(tr.after)} at {_iso(tr.at)})"
+            if tr
+            else ""
+        )
         quota = ""
         if rrule is not None and rrule.count is not None:
-            quota = "; it still consumes one of the RRULE COUNT recurrences"
+            quota = "; each still consumes one of the RRULE COUNT recurrences"
+        if len(dropped) == 1:
+            what = f"{first:%Y-%m-%d %H:%M} does not exist in {zone.name}"
+        else:
+            what = (
+                f"{len(dropped)} consecutive occurrences ({first:%Y-%m-%d %H:%M}"
+                f"..{last:%H:%M}) do not exist in {zone.name}"
+            )
         out.append(
             Finding(
                 "skipped_occurrence",
                 "warning",
-                f"{local:%Y-%m-%d %H:%M} does not exist in {zone.name}{when}; "
-                f"the '{schedule.policy.gap}' policy drops the run{quota}",
+                f"{what}{when}; the '{schedule.policy.gap}' policy drops "
+                f"{'the run' if len(dropped) == 1 else 'all of them'}{quota}",
                 at=tr.at if tr else None,
-                evidence={"local": local, "gap_seconds": int(tr.gap.total_seconds()) if tr else None,
-                          "transition": _iso(tr.at) if tr else None},
+                evidence={
+                    "local": first,
+                    "last_local": last if len(dropped) > 1 else None,
+                    "count": len(dropped),
+                    "gap_seconds": int(tr.gap.total_seconds()) if tr else None,
+                    "transition": _iso(tr.at) if tr else None,
+                },
             )
         )
 
@@ -595,11 +621,12 @@ def verify(
     contracts: Sequence[Contract] | Sequence[dict] = (),
     lo: datetime | None = None,
     hi: datetime | None = None,
+    max_firings: int = 1_500_000,
 ) -> Report:
     """Exhaustively check ``contracts`` over ``[lo, hi)``."""
     if lo is None or hi is None:
         raise HorizonError("verify() needs a window (lo, hi)")
-    sim = simulate(schedule, lo, hi)
+    sim = simulate(schedule, lo, hi, max_firings=max_firings)
     parsed: list[Contract] = []
     for c in contracts:
         parsed.append(c if isinstance(c, Contract) else parse_contract(c))

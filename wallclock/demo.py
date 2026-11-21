@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .report import render_html
+from .report import render_html, render_ics
 from .schedule import Schedule
 from .tz import Policy
 from .verify import Report, horizon, parse_contract, verify
@@ -142,6 +142,12 @@ def run_demo(out_dir: str | None = None, as_json: bool = False) -> int:
         path.mkdir(parents=True, exist_ok=True)
         for case, report in reports:
             (path / f"{case.slug}.html").write_text(render_html(report, title=case.title), encoding="utf-8")
+        flagship, flagship_report = reports[0]
+        (path / f"{flagship.slug}.ics").write_text(
+            render_ics(flagship_report.simulation.firings, flagship.schedule,
+                       name=flagship.title, limit=2000),
+            encoding="utf-8",
+        )
         (path / "index.html").write_text(_index(reports), encoding="utf-8")
         print(f"HTML tour written to {path / 'index.html'}")
     return 0
